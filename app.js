@@ -1242,6 +1242,18 @@ function refreshAll() {
   $('#kOrf').textContent = fmt(state.orfs.length);
   $('#kSite').textContent = fmt(state.sites.length);
 
+  // 卡片副标题与底栏
+  $('#kLenSub').textContent = state.topology === 'circular' ? '环状序列' : '线性序列';
+  $('#kGCSub').textContent = `滑窗 ${$('#gcWin').value} bp`;
+  let longest = 0;
+  for (const o of state.orfs) if (o.aa > longest) longest = o.aa;
+  $('#kOrfSub').textContent = longest ? `最长 ${fmt(longest)} aa` : '未检出';
+  const counts = {};
+  for (const s of state.sites) counts[s.enz.n] = (counts[s.enz.n] || 0) + 1;
+  const uniqEnz = Object.keys(counts).filter((k) => counts[k] === 1).length;
+  $('#kSiteSub').textContent = uniqEnz ? `单切点 ${uniqEnz} 种` : `${Object.keys(counts).length} 种酶`;
+  $('#footMeta').textContent = `${rec.name} · ${fmt(st.len)} bp · ${rec.desc || '本地序列'}`;
+
   const picker = $('#orfPicker');
   const options = state.orfs.slice(0, 40);
   picker.innerHTML = options.length
