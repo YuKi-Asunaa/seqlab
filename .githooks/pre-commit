@@ -1,0 +1,32 @@
+#!/bin/sh
+# ============================================================
+# 提交前密钥扫描
+# 启用方式（一次即可）：
+#   git config core.hooksPath .githooks
+# 误报时跳过：
+#   git commit --no-verify
+# ============================================================
+
+PATTERNS='sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+STATUS=0
+
+for f in $(git diff --cached --name-only --diff-filter=ACM); do
+  case "$f" in
+    *.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip|*.woff|*.woff2) continue ;;
+  esac
+  [ -f "$f" ] || continue
+  HITS=$(grep -InE "$PATTERNS" "$f" 2>/dev/null)
+  if [ -n "$HITS" ]; then
+    echo "✖ 疑似密钥：$f" >&2
+    echo "$HITS" | head -n 5 >&2
+    STATUS=1
+  fi
+done
+
+if [ $STATUS -ne 0 ]; then
+  echo "" >&2
+  echo "提交已被阻止。若确认是误报，可用：git commit --no-verify" >&2
+fi
+
+exit $STATUS

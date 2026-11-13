@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SeqLab · 序列分析工作台</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#14b8a6"/><stop offset="100%" stop-color="#0f766e"/>
+          </linearGradient>
+        </defs>
+        <path d="M10 4c0 8 12 8 12 16s-12 8-12 16" stroke="url(#lg)" stroke-width="2.6" fill="none" stroke-linecap="round" transform="translate(0,-4)"/>
+        <path d="M22 4c0 8-12 8-12 16s12 8 12 16" stroke="url(#lg)" stroke-width="2.6" fill="none" stroke-linecap="round" transform="translate(0,-4)"/>
+        <path d="M11.4 11.5h9.2M10 17h12M11.4 22.5h9.2" stroke="#94a3b8" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <h1>SeqLab</h1>
+      <p>序列分析工作台</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <div class="status-chip" id="statusChip"><i></i><span>等待输入序列</span></div>
+    <button class="btn ghost" id="btnDemo">载入示例</button>
+  </div>
+</header>
+
+<main class="shell">
+  <!-- ============ 侧栏 ============ -->
+  <aside class="sidebar">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>序列输入</h2>
+        <span class="hint">FASTA / 纯文本</span>
+      </div>
+      <div class="drop" id="dropZone">
+        <svg viewBox="0 0 24 24" class="drop-ico" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <p><b>拖入 FASTA 文件</b> 或点击选择</p>
+        <input type="file" id="fileInput" accept=".fa,.fasta,.fna,.txt,.seq" hidden />
+      </div>
+      <textarea id="seqInput" spellcheck="false" placeholder=">my_sequence&#10;ATGCGTACGT..."></textarea>
+      <div class="row gap">
+        <button class="btn primary" id="btnParse">解析序列</button>
+        <select class="select" id="sampleSel" aria-label="示例序列">
+          <option value="">选择示例…</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>序列列表</h2>
+        <span class="hint" id="recCount">0</span>
+      </div>
+      <ul class="rec-list" id="recordList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>参数</h2></div>
+      <div class="field">
+        <label for="minAA">最短 ORF 长度</label>
+        <div class="field-ctl">
+          <input type="range" id="minAA" min="10" max="200" step="5" value="30" />
+          <output id="minAAOut">30 aa</output>
+        </div>
+      </div>
+      <div class="field">
+        <label for="gcWin">GC 滑窗宽度</label>
+        <div class="field-ctl">
+          <input type="range" id="gcWin" min="20" max="500" step="10" value="100" />
+          <output id="gcWinOut">100 bp</output>
+        </div>
+      </div>
+      <label class="checkbox">
+        <input type="checkbox" id="primeOnly" />
+        <span>排除 4 碱基识别酶（切点过密）</span>
+      </label>
+    </section>
+  </aside>
+
+  <!-- ============ 工作区 ============ -->
+  <section class="workspace">
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="overview" role="tab">概览</button>
+      <button class="tab" data-tab="orf" role="tab">ORF 与翻译</button>
+      <button class="tab" data-tab="enzyme" role="tab">酶切图谱</button>
+      <button class="tab" data-tab="codon" role="tab">密码子偏好</button>
+      <button class="tab" data-tab="align" role="tab">序列比对</button>
+    </nav>
+
+    <!-- 概览 -->
+    <section class="pane active" data-pane="overview">
+      <div class="kpis">
+        <div class="kpi"><span>序列长度</span><strong id="kLen">—</strong><em>bp</em></div>
+        <div class="kpi"><span>GC 含量</span><strong id="kGC">—</strong><em>%</em></div>
+        <div class="kpi"><span>ORF</span><strong id="kOrf">—</strong><em>个</em></div>
+        <div class="kpi"><span>酶切位点</span><strong id="kSite">—</strong><em>个</em></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><h3>碱基组成</h3><span class="hint">A / T / G / C 计数</span></div>
+          <div class="canvas-box" style="height:250px"><canvas id="compCanvas"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>GC 含量与 GC skew</h3>
+            <span class="hint" id="gcHint">窗口 100 bp</span>
+          </div>
+          <div class="canvas-box" style="height:250px"><canvas id="gcCanvas"></canvas></div>
+          <div class="legend">
+            <span class="lg"><i style="background:#0f766e"></i>GC 含量</span>
+            <span class="lg"><i style="background:#f59e0b"></i>GC skew</span>
+            <span class="lg"><i class="dash" style="background:#94a3b8"></i>平均 GC</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>序列概览</h3><span class="hint" id="stripHint">—</span></div>
+        <div class="canvas-box" style="height:78px"><canvas id="stripCanvas"></canvas></div>
+        <div class="legend">
+          <span class="lg"><i style="background:#16a34a"></i>A</span>
+          <span class="lg"><i style="background:#2563eb"></i>C</span>
+          <span class="lg"><i style="background:#f59e0b"></i>G</span>
+          <span class="lg"><i style="background:#dc2626"></i>T</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ORF -->
+    <section class="pane" data-pane="orf">
+      <div class="toolbar">
+        <span class="toolbar-label">阅读框视图</span>
+        <span class="hint" id="orfSummary">—</span>
+        <span class="grow"></span>
+        <div class="segmented" id="orfStrand">
+          <button class="active" data-strand="both">双链</button>
+          <button data-strand="plus">正链</button>
+          <button data-strand="minus">负链</button>
+        </div>
+      </div>
+
+      <div class="card pad-sm">
+        <div class="orf-map" id="orfMap"></div>
+      </div>
+
+      <div class="grid-2 orf-detail-grid">
+        <div class="card">
+          <div class="card-head">
+            <h3>选中 ORF</h3>
+            <span class="hint" id="orfMeta">点击上方任一条带查看序列</span>
+          </div>
+          <div id="orfDetail" class="orf-detail">
+            <p class="empty">在 ORF 地图上点击一个阅读框，这里会显示核苷酸与氨基酸对应关系。</p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>ORF 列表 <span class="hint" id="orfListCount"></span></h3><span class="hint">按长度降序</span></div>
+          <div class="table-wrap short"><table class="tbl" id="orfTable">
+            <thead><tr><th>#</th><th>链</th><th>起点</th><th>终点</th><th>长度</th><th>氨基酸</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 酶切 -->
+    <section class="pane" data-pane="enzyme">
+      <div class="toolbar">
+        <div class="segmented" id="topoSeg">
+          <button data-topo="linear">线性</button>
+          <button data-topo="circular" class="active">环状</button>
+        </div>
+        <select class="select" id="enzymeSet" aria-label="酶集合">
+          <option value="common">常用 24 种内切酶</option>
+          <option value="all">全部 39 种内切酶</option>
+          <option value="unique">仅单酶切位点</option>
+        </select>
+        <select class="select" id="labelMode" aria-label="标签模式">
+          <option value="unique">标注唯一位点</option>
+          <option value="all">标注全部位点</option>
+          <option value="none">不标注</option>
+        </select>
+        <span class="grow"></span>
+        <span class="hint" id="enzymeHint">—</span>
+      </div>
+
+      <div class="grid-2 map-row">
+        <div class="card pad-sm">
+          <div class="canvas-box map-box"><canvas id="mapCanvas"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>酶切位点</h3><span class="hint" id="siteCount">0 个</span></div>
+          <div class="table-wrap tall"><table class="tbl" id="siteTable">
+            <thead><tr><th>酶</th><th>识别序列</th><th>位置</th><th>切点</th><th>末端</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 密码子 -->
+    <section class="pane" data-pane="codon">
+      <div class="toolbar">
+        <span class="toolbar-label">分析对象</span>
+        <select class="select" id="orfPicker" aria-label="ORF 选择"></select>
+        <span class="grow"></span>
+        <div class="chip">密码子 <b id="cdTotal">—</b></div>
+        <div class="chip">GC3s <b id="cdGC3">—</b></div>
+        <div class="chip">ENC <b id="cdENC">—</b></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h3>同义密码子使用频率</h3>
+          <span class="hint">单元格：密码子 · 次数 · RSCU　｜　颜色 = 该氨基酸内相对同义密码子使用度</span>
+        </div>
+        <div class="codon-grid" id="codonGrid"></div>
+        <div class="scale-legend">
+          <span>RSCU</span>
+          <div class="scale-bar"></div>
+          <span>0</span><span>1</span><span>2+</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>氨基酸组成</h3><span class="hint">按密码子数统计</span></div>
+        <div class="aa-bars" id="aaBars"></div>
+      </div>
+    </section>
+
+    <!-- 比对 -->
+    <section class="pane" data-pane="align">
+      <div class="card">
+        <div class="align-inputs">
+          <div class="field-block">
+            <div class="field-title"><span class="tag a">A</span> 参考序列</div>
+            <textarea id="alnA" spellcheck="false"></textarea>
+          </div>
+          <div class="field-block">
+            <div class="field-title"><span class="tag b">B</span> 查询序列</div>
+            <textarea id="alnB" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="toolbar wrap">
+          <div class="segmented" id="alnMode">
+            <button class="active" data-mode="global">全局 (NW)</button>
+            <button data-mode="local">局部 (SW)</button>
+          </div>
+          <label class="inline-field">匹配 <input type="number" id="sMatch" value="2" min="0" max="9"></label>
+          <label class="inline-field">错配 <input type="number" id="sMis" value="-1" min="-9" max="0"></label>
+          <label class="inline-field">空位 <input type="number" id="sGap" value="-2" min="-9" max="0"></label>
+          <span class="grow"></span>
+          <button class="btn ghost" id="btnMutate">生成 B 的变异副本</button>
+          <button class="btn primary" id="btnAlign">运行比对</button>
+        </div>
+      </div>
+
+      <div class="align-stats" id="alnStats"></div>
+
+      <div class="grid-2 align-row">
+        <div class="card">
+          <div class="card-head"><h3>比对结果</h3><span class="hint">60 列 / 行</span></div>
+          <div class="aln-view" id="alnView"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>点阵图</h3><span class="hint">k = 8</span></div>
+          <div class="canvas-box" style="height:420px"><canvas id="dotCanvas"></canvas></div>
+        </div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script src="samples.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
